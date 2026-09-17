@@ -61,83 +61,34 @@ async def _send_chunks(client, data: bytes, chunk_size: int = 20, delay: float =
         await asyncio.sleep(delay)
 
 async def _send_ble_payload(mac_address: str, payloads: list[bytes], progress_cb=None):
-    """Envía los paquetes binarios por Bluetooth LE con protocolo de sincronización completo."""
+    """Envía los paquetes binarios por Bluetooth LE según el protocolo nativo de DeTonger."""
     from bleak import BleakClient
-
-    notifications = []
-    resp_event = asyncio.Event()
-
-    def _on_notify(sender, data):
-        notifications.append(data)
-        resp_event.set()
 
     async with BleakClient(mac_address, timeout=15.0) as client:
         if not client.is_connected:
             raise ConnectionError(f"No se pudo conectar al dispositivo BLE {mac_address}")
 
         if progress_cb:
-            progress_cb("Conectado por Bluetooth. Iniciando sincronización...")
-
-        # 1. Habilitar canal de notificaciones UART
-        await client.start_notify(NOTIFY_CHAR_UUID, _on_notify)
-        await asyncio.sleep(0.4)
+            progress_cb("Conectado por Bluetooth. Enviando datos al cabezal...")
 
         try:
-            # 2. Handshake de inicialización
-            pkg_init = bytes([
-                0x1F, 0x71, 0x00, 0x88,  # CMD_PRINTER_DPI (0x71)
-                0x1F, 0x72, 0x00, 0x88,  # CMD_PRINTER_WIDTH (0x72)
-                0x1F, 0x70, 0x00, 0x88,  # CMD_IS_PRINTABLE (0x70)
-            ])
-            await _send_chunks(client, pkg_init)
-            await asyncio.sleep(0.3)
-
-            # 3. Desbloqueo de configuración de hardware
-            pkg_unlock = bytes([
-                0x1F, 0x80, 0x01, 0x7F, 0x88, # CMD_ENABLE_SETTING 127
-                0x1F, 0x84, 0x01, 0x01, 0x88, # CMD_HARDWARE_FLAGS 1
-                0x1F, 0x80, 0x01, 0x80, 0x88, # CMD_ENABLE_SETTING 128
-            ])
-            await _send_chunks(client, pkg_unlock)
-            await asyncio.sleep(0.3)
-
-            # 4. Enviar cada página de etiqueta
+            # Enviar cada página de etiqueta (cada payload ya incluye inicio, parámetros, raster y form-feed)
             for idx, payload in enumerate(payloads, 1):
                 if progress_cb:
-                    progress_cb(f"Imprimiendo etiqueta {idx}/{len(payloads)}...")
+                    progress_cb(f"Imprimiendo etiqueta {idx}/{len(payloads)} ({len(payload)} bytes)...")
 
-                # Verificación previa y preparación de cabezal
-                pkg_status = bytes([
-                    0x1F, 0x80, 0x01, 0x7F, 0x88,
-                    0x1F, 0x84, 0x01, 0x01, 0x88,
-                    0x1F, 0x80, 0x01, 0x00, 0x88,
-                    0x1F, 0x70, 0x00, 0x88, # CMD_IS_PRINTABLE
-                    0x1F, 0x77, 0x00, 0x88  # CMD_BUFFER_SIZE
-                ])
-                await _send_chunks(client, pkg_status)
-                await asyncio.sleep(0.3)
-
-                # Enviar payload de imagen con espaciado seguro para el chip DF2
-                await _send_chunks(client, payload, chunk_size=20, delay=0.020)
-                await asyncio.sleep(0.8)
-
-                # Form Feed adicional para que la etiqueta avance hasta la barra de corte
-                await client.write_gatt_char(WRITE_CHAR_UUID, bytes([0x0C]), response=False)
-                await asyncio.sleep(1.0)
+                await _send_chunks(client, payload, chunk_size=20, delay=0.015)
+                # Pausa para que el mecanismo térmico y motor de tracción ejecuten
+                await asyncio.sleep(2.0)
 
             if progress_cb:
                 progress_cb("Finalizando impresión...")
-
-            # Pausa para que el motor termine el arrastre
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(0.5)
         finally:
-            try:
-                await client.stop_notify(NOTIFY_CHAR_UUID)
-            except Exception:
-                pass
+            pass
 
-def print_via_ble(images: list[Image.Image], mac_address: str = DEFAULT_BLE_MAC, gap_type: int = 2, darkness: int = 12, speed: int = 2, progress_cb=None):
-    """Imprime una lista de imágenes de etiquetas directamente por Bluetooth LE con oscuridad térmica optimizada."""
+def print_via_ble(images: list[Image.Image], mac_address: str = DEFAULT_BLE_MAC, gap_type: int = 0, darkness: int = 6, speed: int = 3, progress_cb=None):
+    """Imprime una lista de imágenes de etiquetas directamente por Bluetooth LE."""
     payloads = []
     for img in images:
         payloads.append(encode_image_to_dothan_bin(img, gap_type=gap_type, darkness=darkness, speed=speed))

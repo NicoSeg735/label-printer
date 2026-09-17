@@ -30,8 +30,8 @@ function encodeImage(imagePath, gapType = 2, darkness = 3, speed = 3) {
         }, {
             printerDPI: 203,
             printerWidth: 384,
-            hardwareFlags: 0x35244211,
-            softwareFlags: 0xF0
+            hardwareFlags: 0,
+            softwareFlags: 16
         });
 
         const outPath = imagePath + '.bin';

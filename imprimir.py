@@ -21,7 +21,8 @@ def main():
     parser.add_argument("--align", choices=["left", "center", "right"], default="center", help="Alineación del texto (default: center)")
     parser.add_argument("--mode", choices=["ble", "usb", "preview"], default="ble", help="Modo: 'ble' (Bluetooth inalámbrico), 'usb' (cable) o 'preview' (guardar imagen)")
     parser.add_argument("--mac", type=str, default=DEFAULT_BLE_MAC, help="Dirección MAC Bluetooth de la impresora")
-    parser.add_argument("--darkness", type=int, default=10, help="Intensidad de calor térmico 1-15 (default: 10)")
+    parser.add_argument("--darkness", type=int, default=6, help="Intensidad de calor térmico 1-15 (default: 6 Normal)")
+    parser.add_argument("--gap-type", type=int, default=0, help="Tipo de papel: 0=Continuo (sin sensor de brecha), 2=Etiquetas troqueladas con brecha (default: 0)")
     parser.add_argument("--status", action="store_true", help="Consultar telemetría, sensores y contadores de la impresora vía BLE")
 
     args = parser.parse_args()
@@ -115,6 +116,7 @@ def main():
             print_via_ble(
                 images=images,
                 mac_address=args.mac,
+                gap_type=args.gap_type,
                 darkness=args.darkness,
                 progress_cb=lambda msg: print(f"  -> {msg}")
             )
