@@ -12,13 +12,20 @@ DOTS_PER_MM = DPI / 25.4
 def mm_to_dots(mm: float) -> int:
     return int(round(mm * DOTS_PER_MM))
 
-def get_font(size_pt: int = 18):
-    """Carga una fuente legible de Windows o la estándar por defecto."""
-    font_paths = [
+def get_font(size_pt: int = 18, bold: bool = True):
+    """Carga una fuente legible (negrita por defecto para máxima nitidez térmica)."""
+    font_paths = []
+    if bold:
+        font_paths.extend([
+            r"C:\Windows\Fonts\arialbd.ttf",
+            r"C:\Windows\Fonts\segoeuib.ttf",
+            r"C:\Windows\Fonts\calibrib.ttf"
+        ])
+    font_paths.extend([
         r"C:\Windows\Fonts\arial.ttf",
         r"C:\Windows\Fonts\segoeui.ttf",
         r"C:\Windows\Fonts\calibri.ttf"
-    ]
+    ])
     for path in font_paths:
         if os.path.exists(path):
             try:
@@ -78,14 +85,15 @@ def render_labels(
     text: str,
     width_mm: float = 40.0,
     height_mm: float = 30.0,
-    font_size: int = 20,
+    font_size: int = 0,
     margin_mm: float = 2.0,
     align: str = "center", # "left", "center", "right"
-    header: str = None
+    header: str = None,
+    border: bool = False
 ) -> list[Image.Image]:
     """
     Toma un texto libre y genera una o varias imágenes de etiqueta según el tamaño.
-    Si el texto es largo, lo divide y pagina automáticamente.
+    Si font_size es 0, calcula automáticamente el tamaño más grande que entra perfectamente.
     """
     width_dots = mm_to_dots(width_mm)
     height_dots = mm_to_dots(height_mm)
@@ -94,8 +102,23 @@ def render_labels(
     printable_width = width_dots - (margin_dots * 2)
     printable_height = height_dots - (margin_dots * 2)
     
-    font = get_font(font_size)
-    footer_font = get_font(max(12, int(font_size * 0.65)))
+    # Auto-escalar tamaño de fuente si es 0
+    if font_size <= 0:
+        if "\n" not in text.strip() and not header:
+            best_size = 20
+            d_test = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+            for test_sz in range(54, 18, -2):
+                test_font = get_font(test_sz, bold=True)
+                b = d_test.textbbox((0, 0), text.strip(), font=test_font)
+                if (b[2] - b[0]) <= printable_width and (b[3] - b[1]) <= printable_height * 0.7:
+                    best_size = test_sz
+                    break
+            font_size = best_size
+        else:
+            font_size = 22
+
+    font = get_font(font_size, bold=True)
+    footer_font = get_font(max(12, int(font_size * 0.65)), bold=False)
     
     lines = wrap_text_into_lines(text, font, printable_width)
     
@@ -107,7 +130,7 @@ def render_labels(
     
     header_height = 0
     if header:
-        header_font = get_font(int(font_size * 0.9))
+        header_font = get_font(int(font_size * 0.9), bold=True)
         h_bbox = draw.textbbox((0, 0), header, font=header_font)
         header_height = (h_bbox[3] - h_bbox[1]) + 8
 
@@ -134,6 +157,14 @@ def render_labels(
         # Crear lienzo blanco
         img = Image.new("RGB", (width_dots, height_dots), color=(255, 255, 255))
         d = ImageDraw.Draw(img)
+        
+        # Borde exterior decorativo opcional
+        if border:
+            d.rectangle(
+                [(margin_dots, margin_dots), (width_dots - margin_dots, height_dots - margin_dots)],
+                outline=(0, 0, 0),
+                width=2
+            )
         
         current_y = margin_dots
         

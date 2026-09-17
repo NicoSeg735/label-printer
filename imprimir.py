@@ -16,12 +16,13 @@ def main():
     parser.add_argument("text", nargs="?", default=None, help="Texto a imprimir en la etiqueta")
     parser.add_argument("--width", type=float, default=40.0, help="Ancho de la etiqueta en mm (default: 40)")
     parser.add_argument("--height", type=float, default=30.0, help="Alto de la etiqueta en mm (default: 30)")
-    parser.add_argument("--font-size", type=int, default=20, help="Tamaño de la fuente en puntos (default: 20)")
+    parser.add_argument("--font-size", type=int, default=0, help="Tamaño de la fuente en puntos (default: 0 = auto-ajuste al espacio)")
+    parser.add_argument("--border", action="store_true", help="Dibujar un marco/borde negro alrededor de la etiqueta")
     parser.add_argument("--header", type=str, default=None, help="Encabezado o título opcional arriba de la etiqueta")
     parser.add_argument("--align", choices=["left", "center", "right"], default="center", help="Alineación del texto (default: center)")
     parser.add_argument("--mode", choices=["ble", "usb", "preview"], default="ble", help="Modo: 'ble' (Bluetooth inalámbrico), 'usb' (cable) o 'preview' (guardar imagen)")
     parser.add_argument("--mac", type=str, default=DEFAULT_BLE_MAC, help="Dirección MAC Bluetooth de la impresora")
-    parser.add_argument("--darkness", type=int, default=6, help="Intensidad de calor térmico 1-15 (default: 6 Normal)")
+    parser.add_argument("--darkness", type=int, default=10, help="Intensidad de calor térmico 1-15 (default: 10 Alta)")
     parser.add_argument("--gap-type", type=int, default=0, help="Tipo de papel: 0=Continuo (sin sensor de brecha), 2=Etiquetas troqueladas con brecha (default: 0)")
     parser.add_argument("--status", action="store_true", help="Consultar telemetría, sensores y contadores de la impresora vía BLE")
 
@@ -69,7 +70,8 @@ def main():
         height_mm=args.height,
         font_size=args.font_size,
         header=args.header,
-        align=args.align
+        align=args.align,
+        border=args.border
     )
 
     total = len(images)
