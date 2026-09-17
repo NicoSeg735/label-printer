@@ -89,6 +89,28 @@ def main():
     # Envío a la impresora
     if args.mode == "ble":
         print(f"\n[2/3] Conectando a la impresora por Bluetooth ({args.mac})...")
+        # Pre-chequeo del hardware físico de la impresora
+        telemetry = get_printer_telemetry(args.mac)
+        if not telemetry.get("connected"):
+            print(f"\n[ERROR] No se pudo conectar a la impresora: {telemetry.get('error', 'Desconectada')}")
+            print("Consejo: Asegúrate de que la impresora esté encendida y cerca de la PC.")
+            sys.exit(1)
+
+        code = telemetry.get("printable_code", 0)
+        if code != 0:
+            desc = telemetry.get("printable_status", f"Código {code}")
+            print(f"\n[ALERTA DE HARDWARE] La impresora no está lista para imprimir: {desc}")
+            if code == 34:
+                print("  -> MOTIVO: La tapa de la impresora está abierta o no trabó completamente.")
+                print("     El LED se ilumina en AMARILLO/ÁMBAR indicando este estado.")
+                print("  -> SOLUCIÓN: Cierra la tapa presionando con firmeza en ambos lados hasta")
+                print("     escuchar el 'click'. El LED cambiará a VERDE inmediatamente.")
+            elif code == 35:
+                print("  -> MOTIVO: No se detecta papel. Asegúrate de colocar el rollo.")
+            elif code == 30:
+                print("  -> MOTIVO: Batería baja. Conecta la impresora por USB para cargarla.")
+            sys.exit(1)
+
         try:
             print_via_ble(
                 images=images,
