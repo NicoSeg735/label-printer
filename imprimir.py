@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--align", choices=["left", "center", "right"], default="center", help="Alineación del texto (default: center)")
     parser.add_argument("--mode", choices=["ble", "usb", "preview"], default="ble", help="Modo: 'ble' (Bluetooth inalámbrico), 'usb' (cable) o 'preview' (guardar imagen)")
     parser.add_argument("--mac", type=str, default=DEFAULT_BLE_MAC, help="Dirección MAC Bluetooth de la impresora")
-    parser.add_argument("--darkness", type=int, default=3, help="Intensidad de impresión 1-5 (default: 3)")
+    parser.add_argument("--darkness", type=int, default=10, help="Intensidad de calor térmico 1-15 (default: 10)")
 
     args = parser.parse_args()
 
