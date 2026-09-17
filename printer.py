@@ -62,9 +62,15 @@ async def _send_chunks(client, data: bytes, chunk_size: int = 20, delay: float =
 
 async def _send_ble_payload(mac_address: str, payloads: list[bytes], progress_cb=None):
     """Envía los paquetes binarios por Bluetooth LE según el protocolo nativo de DeTonger."""
-    from bleak import BleakClient
+    from bleak import BleakClient, BleakScanner
 
-    async with BleakClient(mac_address, timeout=15.0) as client:
+    if progress_cb:
+        progress_cb(f"Buscando dispositivo Bluetooth {mac_address}...")
+
+    device = await BleakScanner.find_device_by_address(mac_address, timeout=8.0)
+    target = device if device else mac_address
+
+    async with BleakClient(target, timeout=15.0) as client:
         if not client.is_connected:
             raise ConnectionError(f"No se pudo conectar al dispositivo BLE {mac_address}")
 
@@ -154,7 +160,11 @@ def get_printer_telemetry(mac_address: str = DEFAULT_BLE_MAC) -> dict:
                     telemetry["lifetime_cuts"] = int.from_bytes(packet[11:15], "big")
                     telemetry["lifetime_labels"] = int.from_bytes(packet[15:19], "big")
 
-        async with BleakClient(mac_address, timeout=12.0) as client:
+        from bleak import BleakScanner
+        device = await BleakScanner.find_device_by_address(mac_address, timeout=8.0)
+        target = device if device else mac_address
+
+        async with BleakClient(target, timeout=12.0) as client:
             telemetry["connected"] = client.is_connected
             await client.start_notify(NOTIFY_CHAR_UUID, _on_notify)
             await asyncio.sleep(0.5)
