@@ -21,6 +21,7 @@ Este proyecto permite **imprimir texto directamente** en la impresora de etiquet
 * `label_designer.py`: Motor gráfico de renderizado con Pillow a 203 DPI (ajuste de fuentes, márgenes, cálculo de líneas).
 * `printer.py`: Controlador de comunicación física (Bluetooth LE con `bleak` y USB con Windows Spooler).
 * `encoder.js` & `detong_sdk.js`: Motor de serialización binaria nativo de la impresora térmica.
+* `HISTORIAL_INVESTIGACION.md`: Bitácora técnica completa de ingeniería inversa, telemetría y pruebas físicas.
 
 ---
 
