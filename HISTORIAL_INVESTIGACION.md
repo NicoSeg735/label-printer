@@ -117,12 +117,12 @@ Todos los paquetes que envía y recibe la impresora siguen el formato de trama D
 
 Cuando quieras volver a trabajar en este proyecto, estos son los pasos directos:
 
-1. **Partir del Intento 5 (el que funcionó al 100% mecánicamente):**
-   * El payload de **~250 bytes** con `gap_type = 0`, `darkness = 6` o `10` y compresión nativa fue el único que hizo girar el motor y tocar la música de victoria.
+1. **Usar Bluetooth Classic/RFCOMM como ruta de producción:**
+   * La app oficial y las dos impresiones físicas verificadas desde Windows usan `B8:50:44:0C:9E:39`, canal RFCOMM **1**, con el perfil `sdk-compact`. No volver a tratar BLE como el transporte recomendado.
 2. **Asegurar la cara sensible del papel:**
    * Probar el Scratch Test con la uña. Si la marca negra sale en la cara que apunta al piso de la impresora, se verá la tinta negra.
-3. **Mantener el tamaño del payload bajo (< 400 bytes):**
-   * Usar fuentes de tamaño mediano (ej. 24 a 32 pt) para que el bitmap no genere paquetes masivos mayores a 1 KB que saturen la memoria de la impresora.
+3. **Respetar el framing capturado:**
+   * El emisor RFCOMM divide el stream en tramas de hasta 122 bytes y cierra el canal explícitamente. No sustituirlo por fragmentos BLE de 20 bytes ni quitar el `shutdown()`.
 4. **Opción alternativa USB (Driver de Windows ya instalado):**
    * La impresora ya tiene instalado el driver oficial `P1 Label Printer`.
    * El script `imprimir.py` ya tiene implementado el modo USB:
@@ -156,3 +156,10 @@ Cuando quieras volver a trabajar en este proyecto, estos son los pasos directos:
 * El primer sondeo RFCOMM sin `shutdown()` dejó el firmware reteniendo la sesión. El cierre del socket ahora envía una desconexión explícita antes de liberarlo.
 * Esta revisión de firmware no acepta RFCOMM inmediatamente después de un sondeo BLE. Por eso `imprimir.py --mode classic` reserva BLE para la telemetría posterior, en vez de hacer un pre-chequeo.
 * Se ejecutó el CLI completo con `CLI RFCOMM`. Tras el envío, los contadores quedaron estables en **123 / 7.100 / 13.985**, confirmando una segunda impresión física por la ruta predeterminada.
+
+## 9. Robustecimiento posterior a la validación (2026-09-17)
+
+* La MAC acepta formato con `:` o `-`, se normaliza a mayúsculas y se valida antes de codificar; el canal RFCOMM sólo admite 1-30 y el tiempo de espera 1-120 segundos. Así, una configuración incorrecta falla con un mensaje claro y sin enviar datos parciales.
+* Las operaciones de conexión y envío conservan un límite de tiempo. Los errores de adaptador, emparejamiento, Android conectado o sesión retenida detallan la recuperación sugerida.
+* Si RFCOMM ya entregó el stream pero falla la telemetría BLE posterior, el CLI no reintenta automáticamente: informa la situación y pide revisar el papel, eliminando el riesgo de una etiqueta duplicada.
+* La suite automatizada cubre framing de 122 bytes, cierre RFCOMM, configuración inválida, fallo al crear el socket y trabajos vacíos; se ejecuta con `python -m unittest discover -s tests -v`.

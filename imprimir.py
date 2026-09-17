@@ -18,6 +18,8 @@ from printer import (
     has_durable_print_confirmation,
     motion_counters,
     DEFAULT_BLE_MAC,
+    RFCOMM_CONNECT_TIMEOUT_SECONDS,
+    validate_rfcomm_settings,
 )
 
 def main():
@@ -37,6 +39,12 @@ def main():
     )
     parser.add_argument("--mac", type=str, default=DEFAULT_BLE_MAC, help="Dirección MAC Bluetooth de la impresora")
     parser.add_argument("--rfcomm-channel", type=int, default=1, help="Canal RFCOMM Classic (default: 1, detectado por SDP)")
+    parser.add_argument(
+        "--rfcomm-timeout",
+        type=float,
+        default=RFCOMM_CONNECT_TIMEOUT_SECONDS,
+        help="Tiempo máximo por conexión/envío RFCOMM en segundos (1-120; default: 15)",
+    )
     parser.add_argument("--darkness", type=int, default=10, help="Intensidad de calor térmico 0-14 (default: 10)")
     parser.add_argument("--speed", type=int, default=3, help="Velocidad térmica 0-4 (default: 3)")
     parser.add_argument("--gap-type", type=int, default=0, help="Tipo de papel: 0=Continuo (sin sensor de brecha), 2=Etiquetas troqueladas con brecha (default: 0)")
@@ -49,6 +57,12 @@ def main():
     parser.add_argument("--status", action="store_true", help="Consultar telemetría, sensores y contadores de la impresora vía BLE")
 
     args = parser.parse_args()
+    try:
+        args.mac, args.rfcomm_channel, args.rfcomm_timeout = validate_rfcomm_settings(
+            args.mac, args.rfcomm_channel, args.rfcomm_timeout
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.status:
         print("=" * 60)
@@ -152,6 +166,7 @@ def main():
                     speed=args.speed,
                     profile=args.encoding_profile,
                     channel=args.rfcomm_channel,
+                    connect_timeout=args.rfcomm_timeout,
                     progress_cb=lambda msg: print(f"  -> {msg}"),
                 )
             else:
@@ -164,6 +179,39 @@ def main():
                     profile=args.encoding_profile,
                     progress_cb=lambda msg: print(f"  -> {msg}"),
                 )
+        except Exception as e:
+            print(f"\n[ERROR] No se entregó el trabajo por {transport_name}: {e}")
+            if args.mode == "classic":
+                print("Consejo: apaga Bluetooth en el Android, empareja P1-40608023 desde Windows y reintenta.")
+            else:
+                print("Consejo: usa --mode classic; BLE quedó sólo para diagnóstico y telemetría.")
+            sys.exit(1)
+
+        if args.mode == "classic":
+            # Una vez que sendall() finaliza, reintentar de forma automática
+            # por una telemetría BLE fallida puede duplicar una etiqueta que ya
+            # salió. La confirmación es informativa y nunca vuelve a enviar.
+            print("  -> Stream RFCOMM entregado a Windows; verificando telemetría sin reenviar...")
+            after = get_printer_telemetry(args.mac)
+            time.sleep(1)
+            confirmation = get_printer_telemetry(args.mac)
+            if not after.get("connected") or not confirmation.get("connected"):
+                print(
+                    "[3/3] Trabajo RFCOMM enviado. No se pudo confirmar por BLE; "
+                    "revisá la etiqueta antes de reintentar para evitar un duplicado."
+                )
+            elif motion_counters(after) != motion_counters(confirmation):
+                print(
+                    "[3/3] Trabajo RFCOMM enviado. Los contadores aún cambian; "
+                    "esperá a que termine antes de mandar otro trabajo."
+                )
+            else:
+                print(
+                    "  -> Contadores posteriores / confirmación: "
+                    f"{motion_counters(after)} / {motion_counters(confirmation)}"
+                )
+                print("[3/3] Stream RFCOMM entregado; la telemetría posterior quedó estable.")
+        else:
             # Que Windows acepte los paquetes ATT no demuestra que la P1 los
             # haya ejecutado. Sus contadores son la evidencia mínima de
             # actividad física disponible sin depender de la observación visual.
@@ -171,33 +219,19 @@ def main():
             time.sleep(1)
             confirmation = get_printer_telemetry(args.mac)
             if not after.get("connected") or not confirmation.get("connected"):
-                raise RuntimeError("No se pudo obtener confirmación de la impresora después del envío.")
-            if args.mode == "classic":
+                print("\n[ERROR] No se pudo obtener confirmación de la impresora después del envío.")
+                sys.exit(1)
+            print(
+                "  -> Contadores (antes / después / confirmación): "
+                f"{motion_counters(telemetry)} / {motion_counters(after)} / {motion_counters(confirmation)}"
+            )
+            if not has_durable_print_confirmation(telemetry, after, confirmation):
                 print(
-                    "  -> Contadores posteriores / confirmación: "
-                    f"{motion_counters(after)} / {motion_counters(confirmation)}"
+                    "\n[ERROR] La impresora no confirmó actividad física de forma estable. "
+                    "No se considera una impresión exitosa."
                 )
-                if motion_counters(after) != motion_counters(confirmation):
-                    raise RuntimeError("Los contadores posteriores no se estabilizaron.")
-                print("[3/3] Stream RFCOMM entregado; la telemetría posterior quedó estable.")
-            else:
-                print(
-                    "  -> Contadores (antes / después / confirmación): "
-                    f"{motion_counters(telemetry)} / {motion_counters(after)} / {motion_counters(confirmation)}"
-                )
-                if not has_durable_print_confirmation(telemetry, after, confirmation):
-                    raise RuntimeError(
-                        "La impresora no confirmó actividad física de forma estable. "
-                        "No se considera una impresión exitosa."
-                    )
-                print("[3/3] ¡La impresora confirmó actividad física!")
-        except Exception as e:
-            print(f"\n[ERROR] No se confirmó la impresión por {transport_name}: {e}")
-            if args.mode == "classic":
-                print("Consejo: apaga Bluetooth en el Android, empareja P1-40608023 desde Windows y reintenta.")
-            else:
-                print("Consejo: usa --mode classic; BLE quedó sólo para diagnóstico y telemetría.")
-            sys.exit(1)
+                sys.exit(1)
+            print("[3/3] ¡La impresora confirmó actividad física!")
 
     elif args.mode == "usb":
         print("\n[2/3] Enviando trabajo a la cola USB de Windows ('P1 Label Printer')...")

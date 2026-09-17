@@ -8,6 +8,8 @@ import os
 import sys
 import json
 import asyncio
+import math
+import re
 import socket
 import subprocess
 import tempfile
@@ -21,14 +23,52 @@ WRITE_CHAR_UUID = "49535343-8841-43f4-a8d4-ecbe34729bb3"
 NOTIFY_CHAR_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
 RFCOMM_CHANNEL = 1
 RFCOMM_MAX_PAYLOAD = 122
+RFCOMM_CONNECT_TIMEOUT_SECONDS = 15.0
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MAX_PRINT_WIDTH_DOTS = 384
+_BLUETOOTH_ADDRESS_RE = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 
 
 @dataclass(frozen=True)
 class EncodedLabel:
     data: bytes
     profile: str
+
+
+def normalize_bluetooth_address(mac_address: str) -> str:
+    """Valida y normaliza una dirección Bluetooth antes de abrir un transporte.
+
+    Windows suele mostrar la dirección con ``:`` y algunas herramientas la
+    copian con ``-``. Aceptamos ambas formas, pero nunca dejamos que un valor
+    incompleto llegue al socket, donde produciría un ``OSError`` poco claro.
+    """
+    if not isinstance(mac_address, str):
+        raise ValueError("La dirección Bluetooth debe ser texto, por ejemplo B8:50:44:0C:9E:39.")
+    normalized = mac_address.strip().upper().replace("-", ":")
+    if not _BLUETOOTH_ADDRESS_RE.fullmatch(normalized):
+        raise ValueError(
+            "Dirección Bluetooth inválida. Usá seis pares hexadecimales, "
+            "por ejemplo B8:50:44:0C:9E:39."
+        )
+    return normalized
+
+
+def validate_rfcomm_settings(
+    mac_address: str,
+    channel: int = RFCOMM_CHANNEL,
+    connect_timeout: float = RFCOMM_CONNECT_TIMEOUT_SECONDS,
+) -> tuple[str, int, float]:
+    """Comprueba la configuración RFCOMM antes de codificar o imprimir."""
+    normalized_mac = normalize_bluetooth_address(mac_address)
+    if isinstance(channel, bool) or not isinstance(channel, int) or not 1 <= channel <= 30:
+        raise ValueError("El canal RFCOMM debe ser un entero entre 1 y 30.")
+    try:
+        normalized_timeout = float(connect_timeout)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("El tiempo de espera RFCOMM debe ser un número de segundos.") from exc
+    if not math.isfinite(normalized_timeout) or not 1.0 <= normalized_timeout <= 120.0:
+        raise ValueError("El tiempo de espera RFCOMM debe estar entre 1 y 120 segundos.")
+    return normalized_mac, channel, normalized_timeout
 
 
 def motion_counters(telemetry: dict) -> tuple[int | None, int | None, int | None]:
@@ -88,7 +128,20 @@ def encode_image_to_dothan_bin(
             
         encoder_js = os.path.join(SCRIPT_DIR, "encoder.js")
         cmd = ["node", encoder_js, base_path, str(gap_type), str(darkness), str(speed), profile]
-        res = subprocess.run(cmd, cwd=SCRIPT_DIR, capture_output=True, text=True)
+        try:
+            res = subprocess.run(
+                cmd,
+                cwd=SCRIPT_DIR,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "No se encontró Node.js. Instalalo y asegurate de que el comando 'node' esté en PATH."
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("El encoder tardó más de 30 segundos; no se envió ninguna etiqueta.") from exc
         
         if res.returncode != 0 or not os.path.exists(bin_path):
             raise RuntimeError(f"Error al codificar imagen: {res.stderr or res.stdout}")
@@ -163,6 +216,9 @@ def print_via_ble(
     progress_cb=None,
 ):
     """Imprime una lista de imágenes de etiquetas directamente por Bluetooth LE."""
+    mac_address = normalize_bluetooth_address(mac_address)
+    if not images:
+        raise ValueError("No hay etiquetas para imprimir.")
     payloads = []
     for img in images:
         payloads.append(
@@ -180,7 +236,7 @@ def _send_rfcomm_payload(
     *,
     channel: int = RFCOMM_CHANNEL,
     chunk_size: int = RFCOMM_MAX_PAYLOAD,
-    connect_timeout: float = 15.0,
+    connect_timeout: float = RFCOMM_CONNECT_TIMEOUT_SECONDS,
 ) -> None:
     """Envía bytes nativos por Bluetooth Classic RFCOMM/SPP.
 
@@ -188,20 +244,24 @@ def _send_rfcomm_payload(
     oficial de la P1. RFCOMM gestiona su propio framing; no debe fragmentarse
     el stream como si fuera una característica BLE de 20 bytes.
     """
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        raise ValueError("Los datos de impresión RFCOMM deben ser bytes.")
+    data = bytes(data)
     if not data:
         raise ValueError("No hay datos de impresión para enviar.")
-    if not 1 <= channel <= 30:
-        raise ValueError("El canal RFCOMM debe estar entre 1 y 30.")
     if not 1 <= chunk_size <= RFCOMM_MAX_PAYLOAD:
         raise ValueError(f"chunk_size debe estar entre 1 y {RFCOMM_MAX_PAYLOAD}.")
     if not hasattr(socket, "AF_BLUETOOTH") or not hasattr(socket, "BTPROTO_RFCOMM"):
         raise RuntimeError("Esta instalación de Python no ofrece Bluetooth RFCOMM.")
 
-    client = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+    mac_address, channel, connect_timeout = validate_rfcomm_settings(
+        mac_address, channel, connect_timeout
+    )
+    client = None
     try:
+        client = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         client.settimeout(connect_timeout)
         client.connect((mac_address, channel))
-        client.settimeout(None)
         for offset in range(0, len(data), chunk_size):
             client.sendall(data[offset : offset + chunk_size])
             # La app oficial envía tramas de hasta 122 bytes por RFCOMM. Un
@@ -214,19 +274,25 @@ def _send_rfcomm_payload(
     except TimeoutError as exc:
         raise ConnectionError(
             f"La P1 no respondió por Bluetooth Classic (RFCOMM canal {channel}). "
-            "Desconéctala de la app Android y empárjala desde Windows como P1-40608023."
+            "Apagá Bluetooth en Android, verificá el emparejamiento de Windows con "
+            "P1-40608023 y, si persiste, apagá y encendé la impresora."
         ) from exc
     except OSError as exc:
-        raise ConnectionError(f"No se pudo abrir RFCOMM hacia {mac_address}: {exc}") from exc
+        raise ConnectionError(
+            f"No se pudo abrir RFCOMM hacia {mac_address} (canal {channel}): {exc}. "
+            "Verificá que Windows esté emparejado, que Android no tenga la P1 conectada "
+            "y que la impresora esté encendida."
+        ) from exc
     finally:
         # Algunas revisiones de firmware de la P1 no liberan de inmediato el
         # enlace si Windows sólo destruye el descriptor local.  shutdown()
         # emite la desconexión RFCOMM antes de cerrar el socket.
-        try:
-            client.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
-        client.close()
+        if client is not None:
+            try:
+                client.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            client.close()
 
 
 def print_via_classic(
@@ -237,9 +303,15 @@ def print_via_classic(
     speed: int = 3,
     profile: str = "sdk-compact",
     channel: int = RFCOMM_CHANNEL,
+    connect_timeout: float = RFCOMM_CONNECT_TIMEOUT_SECONDS,
     progress_cb=None,
 ) -> None:
     """Imprime por el transporte RFCOMM usado por la aplicación oficial."""
+    mac_address, channel, connect_timeout = validate_rfcomm_settings(
+        mac_address, channel, connect_timeout
+    )
+    if not images:
+        raise ValueError("No hay etiquetas para imprimir.")
     payloads = [
         encode_image_to_dothan_bin(
             image, gap_type=gap_type, darkness=darkness, speed=speed, profile=profile
@@ -252,12 +324,18 @@ def print_via_classic(
                 f"Enviando etiqueta {index}/{len(payloads)} por RFCOMM "
                 f"({len(payload.data)} bytes, perfil {payload.profile}, canal {channel})..."
             )
-        _send_rfcomm_payload(mac_address, payload.data, channel=channel)
+        _send_rfcomm_payload(
+            mac_address,
+            payload.data,
+            channel=channel,
+            connect_timeout=connect_timeout,
+        )
         if index < len(payloads):
             time.sleep(0.8)
 
 def get_printer_telemetry(mac_address: str = DEFAULT_BLE_MAC) -> dict:
     """Consulta el estado del hardware, sensores y contador de vida útil de la impresora."""
+    mac_address = normalize_bluetooth_address(mac_address)
     from bleak import BleakClient
 
     telemetry = {

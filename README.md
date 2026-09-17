@@ -30,12 +30,31 @@ Este proyecto genera etiquetas para una impresora térmica **DeTonger P1 (DT01)*
 
 ## 💻 Ejemplos de uso
 
+### Preparación y recuperación ante fallos
+
+Instala las dependencias de Python y asegurate de tener Node.js disponible para el encoder:
+
+```bash
+python -m pip install -r requirements.txt
+node --version
+```
+
+Para RFCOMM, Windows debe estar emparejado con `P1-40608023` y la app Android no debe conservar una conexión activa con la P1. Si una conexión expira, apagá y encendé la impresora antes de reintentar. El programa valida la MAC, el canal y el tiempo de espera antes de codificar; también cierra RFCOMM explícitamente para liberar el enlace en el firmware de la P1.
+
+Cuando el stream RFCOMM se entrega pero la verificación BLE posterior no está disponible, el programa **no reenvía** el trabajo: primero hay que mirar la salida de papel, para no imprimir una etiqueta duplicada.
+
 ### 1. Imprimir un texto rápido por Bluetooth:
 ```bash
 python imprimir.py "Caja 4: Repuestos de computación"
 ```
 
 Antes de la primera impresión, desconecta la app Android y empareja `P1-40608023` desde **Configuración de Windows → Bluetooth y dispositivos**. Si fuera necesario, el canal puede indicarse explícitamente con `--rfcomm-channel 1`.
+
+Para una conexión lenta o con interferencias, se puede ampliar el límite sin modificar el código:
+
+```bash
+python imprimir.py "Etiqueta" --rfcomm-timeout 30
+```
 
 ### 2. Imprimir con un encabezado o título arriba:
 ```bash
