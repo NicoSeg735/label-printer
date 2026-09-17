@@ -5,6 +5,7 @@ Este proyecto genera etiquetas para una impresora térmica **DeTonger P1 (DT01)*
 ---
 
 ## 🚀 Características principales
+* **Aplicación web local para Windows:** Abrí `Abrir impresor.cmd` (o `python web_app.py`) para usar una interfaz moderna desde tu navegador: texto, fotos, búsqueda de imágenes, material, tamaño, transporte, copias y vista previa antes de imprimir. Todo el motor de impresión sigue ejecutándose localmente en la PC.
 * **Paginación y ajuste automático de texto (Word-Wrapping):**  
   Calcula el ancho y alto disponible en milímetros. Si el texto cabe en una etiqueta, lo centra limpiamente. Si el texto es largo, lo divide de forma inteligente en párrafos/líneas y genera etiquetas consecutivas numeradas (`[1/2]`, `[2/2]`, etc.).
 * **Conexión inalámbrica directa (Bluetooth Classic/RFCOMM):**
@@ -29,6 +30,14 @@ Este proyecto genera etiquetas para una impresora térmica **DeTonger P1 (DT01)*
 ---
 
 ## 💻 Ejemplos de uso
+
+### Aplicación de escritorio (recomendado)
+
+En Windows, hacé doble clic en `Abrir impresor.cmd`. Se abrirá la aplicación local en tu navegador, con una interfaz preparada para escribir o pegar el entrenamiento, elegir etiquetas adhesivas o papel continuo, ajustar el tamaño y ver cada página antes de pulsar **Imprimir**. Para tenerla siempre a mano, creá un acceso directo a ese archivo y movelo al Escritorio.
+
+También incorpora la pestaña **Foto / imagen**: elegí una foto local o buscá una imagen en Wikimedia Commons, ajustá el encuadre y el contraste, y usá tramado térmico para obtener una versión imprimible en blanco y negro. Revisá siempre la licencia de una imagen encontrada antes de usarla.
+
+La opción **Elegir sesión de Notion** es el punto de entrada que se conectará a la base de sesiones; mientras tanto, pegar el contenido de la sesión mantiene el flujo completamente local.
 
 ### Preparación y recuperación ante fallos
 

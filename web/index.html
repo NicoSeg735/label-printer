@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Impresor de etiquetas</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">▤</span><span>Impresor</span></div>
+        <div id="notice" class="notice" aria-live="polite">Listo para crear una etiqueta.</div>
+        <button id="status-button" class="button button-quiet">Estado de impresora</button>
+      </header>
+      <section class="hero">
+        <div><p class="eyebrow">ETIQUETAS QUE SE ENTIENDEN DE UN VISTAZO</p><h1>Prepará, mirá e imprimí.</h1><p class="hero-copy">Tu entreno, una nota rápida o una foto convertida para papel térmico.</p></div>
+        <div class="printer-pill"><span class="dot"></span> P1 lista para conectar</div>
+      </section>
+      <section class="workspace">
+        <aside class="control-panel">
+          <div class="mode-switch" role="tablist"><button class="mode active" data-mode="text">Texto</button><button class="mode" data-mode="image">Foto / imagen</button><button class="mode" data-mode="notion">Entrenamiento</button></div>
+          <div id="text-panel" class="mode-panel">
+            <label>Encabezado <span>opcional</span><input id="text-header" placeholder="Ej.: Natación · jueves"></label>
+            <label>Contenido<textarea id="text-content" rows="9">CALENTAMIENTO
+200 libre suave
+
+SERIE PRINCIPAL
+6 × 100 crol — c/2:00
+4 × 50 técnica — c/1:15
+
+VUELTA A LA CALMA
+100 espalda suave</textarea></label>
+            <div class="two-columns"><label>Alineación<select id="text-align"><option value="left">Izquierda</option><option value="center">Centrada</option><option value="right">Derecha</option></select></label><label>Letra <span>0 = automática</span><input id="font-size" type="number" min="0" value="0"></label></div>
+            <label class="check-label"><input id="text-border" type="checkbox" checked> Incluir borde fino</label>
+          </div>
+          <div id="image-panel" class="mode-panel hidden">
+            <div class="image-choice"><label for="image-upload" class="upload-button">Elegir archivo</label><input id="image-upload" class="file-input" type="file" accept="image/*"><span id="selected-image-name">Ninguna imagen elegida</span></div>
+            <div class="search-row"><input id="image-search" placeholder="Buscar imágenes, ej. mariposa azul"><button id="search-button" class="button button-secondary">Buscar</button></div>
+            <div id="search-results" class="search-results"></div>
+            <div id="selected-image" class="selected-image hidden"><img alt="Imagen seleccionada"><span>Imagen seleccionada</span></div>
+            <label>Título sobre la foto <span>opcional</span><input id="image-title" placeholder="Ej.: Técnica de mariposa"></label>
+            <div class="two-columns"><label>Encuadre<select id="image-fit"><option value="cover">Llenar etiqueta</option><option value="contain">Ver completa</option></select></label><label>Tratamiento<select id="image-effect"><option value="dither">Tramado térmico</option><option value="threshold">Alto contraste</option><option value="gray">Escala de grises</option></select></label></div>
+            <label>Contraste<input id="image-contrast" type="range" min="0.4" max="2.8" step="0.1" value="1.2"></label>
+            <p class="microcopy">La búsqueda usa Wikimedia Commons. Revisá el origen y la licencia antes de usar una imagen.</p>
+          </div>
+          <div id="notion-panel" class="mode-panel hidden"><div class="notion-card"><span class="notion-symbol">N</span><div><strong>Sesiones de Notion</strong><p>El selector se conectará a tu lista de entrenamientos en el próximo paso.</p></div></div><p>Mientras tanto, pegá la sesión en la pestaña <strong>Texto</strong>.</p></div>
+          <details class="settings" open><summary>Etiqueta e impresión</summary><div class="settings-content">
+            <label>Material<select id="media"><option value="labels">Etiquetas adhesivas troqueladas</option><option value="continuous">Papel continuo</option></select></label>
+            <div class="two-columns"><label>Ancho (mm)<input id="width-mm" type="number" min="1" max="48" step="0.1" value="40"></label><label>Alto (mm)<input id="height-mm" type="number" min="1" step="0.1" value="30"></label></div>
+            <div class="two-columns"><label>Conexión<select id="transport"><option value="bluetooth">Bluetooth</option><option value="usb">USB</option></select></label><label>Copias<input id="copies" type="number" min="1" max="50" value="1"></label></div>
+            <label>MAC Bluetooth<input id="printer-mac" value="B8:50:44:0C:9E:39"></label>
+          </div></details>
+        </aside>
+        <section class="preview-panel">
+          <div class="preview-heading"><div><p class="eyebrow"><span class="live-dot"></span>VISTA PREVIA EN VIVO</p><h2 id="preview-title">Tu etiqueta</h2></div><span id="page-count" class="page-count">Sin generar</span></div>
+          <div id="preview-stage" class="preview-stage"><div class="empty-preview"><span>✦</span><p>Creá una vista previa para verla acá.</p></div></div>
+          <div class="preview-footer"><span class="preview-hint">Las etiquetas se muestran en el orden del rollo.</span><button id="print-button" class="button button-primary" disabled>Imprimir</button></div>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
