@@ -9,4 +9,7 @@ preview_*.png
 test_*.png
 attempt_*.png
 check_*.png
+bugreport-*.zip
+btsnoop_hci.log
+android_*_stream.bin
 .system_generated/

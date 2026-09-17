@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 DPI = 203
 DOTS_PER_MM = DPI / 25.4
+MAX_PRINT_WIDTH_DOTS = 384
 
 def mm_to_dots(mm: float) -> int:
     return int(round(mm * DOTS_PER_MM))
@@ -98,9 +99,18 @@ def render_labels(
     width_dots = mm_to_dots(width_mm)
     height_dots = mm_to_dots(height_mm)
     margin_dots = mm_to_dots(margin_mm)
-    
+
+    if not 1 <= width_dots <= MAX_PRINT_WIDTH_DOTS:
+        raise ValueError(
+            f"El ancho debe estar entre 0.13 y {MAX_PRINT_WIDTH_DOTS / DOTS_PER_MM:.2f} mm "
+            f"({MAX_PRINT_WIDTH_DOTS} dots del cabezal); se recibieron {width_mm} mm."
+        )
+    if height_dots < 1:
+        raise ValueError("La altura de la etiqueta debe ser mayor que 0 mm.")
     printable_width = width_dots - (margin_dots * 2)
     printable_height = height_dots - (margin_dots * 2)
+    if margin_dots < 0 or printable_width <= 0 or printable_height <= 0:
+        raise ValueError("Los márgenes deben dejar área imprimible positiva.")
     
     # Auto-escalar tamaño de fuente si es 0
     if font_size <= 0:

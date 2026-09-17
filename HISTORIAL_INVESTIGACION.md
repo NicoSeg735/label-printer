@@ -130,3 +130,29 @@ Cuando quieras volver a trabajar en este proyecto, estos son los pasos directos:
      python imprimir.py "FUNCIONA!!" --mode usb
      ```
    * Esto envía el trabajo a través de la cola nativa de Windows Spooler (`win32print`), delegando la conversión al driver oficial del fabricante.
+
+---
+
+## 6. Validación posterior con la aplicación oficial
+
+* La aplicación oficial de Android imprimió correctamente una etiqueta de prueba en esta misma P1 después de volver a asentar el rollo. El mecanismo avanzó el papel hasta una posición apta para la siguiente etiqueta.
+* La telemetría pasó de 119 a 120 etiquetas históricas, de 6.826 a 6.873 líneas térmicas y de 13.689 a 13.820 pasos de motor. Por lo tanto, impresora, papel y firmware están verificados.
+* Los flujos BLE propios probados desde este PC no modificaron esos contadores. No deben presentarse como impresiones exitosas hasta capturar una transacción válida de la aplicación oficial o del SDK oficial para esta revisión de firmware.
+
+---
+
+## 7. Captura HCI de Android: causa raíz del transporte (2026-09-17)
+
+* Se activó el registro Bluetooth HCI en un Samsung S22, se hizo una impresión correcta con la app oficial y se analizó el `btsnoop_hci.log` incluido en el informe de errores de Android.
+* La app no escribe el raster por la característica BLE `49535343-...`. Abre una conexión **Bluetooth Classic (BR/EDR)** a `B8:50:44:0C:9E:39`, anuncia el servicio RFCOMM estándar (canal **1**) por SDP y transmite el stream de comandos por esa conexión.
+* La captura contiene 33 tramas RFCOMM salientes para la P1, con carga máxima de 122 bytes. El trabajo válido usa comandos de inicialización y compresión de bitmap `1F 20`, `1F 2B`, `1F 2D` y `1F 3C`.
+* Por lo tanto, el error principal de los intentos anteriores fue de **transporte**, no de asentamiento del papel ni de MTU BLE: aceptar escrituras GATT no equivale a ejecutar un trabajo de impresión.
+* `printer.py` incorpora `print_via_classic()` como ruta predeterminada y el analizador `tools/analyze_btsnoop.py` permite repetir esta verificación en futuras capturas.
+
+## 8. Validación en Windows por RFCOMM (2026-09-17)
+
+* Tras emparejar `P1-40608023` en Windows, el dispositivo apareció como `BTHENUM\DEV_B850440C9E39`. Fue necesario apagar Bluetooth en el S22 para liberar la conexión Classic de la impresora.
+* Se verificó que el canal RFCOMM 1 aceptaba conexión y se envió una prueba directa `RFCOMM OK` sin abrir BLE antes. Los contadores pasaron de **121 / 6.974 / 13.951** a **122 / 7.037 / 13.968** (etiquetas / líneas / pasos): impresión física confirmada.
+* El primer sondeo RFCOMM sin `shutdown()` dejó el firmware reteniendo la sesión. El cierre del socket ahora envía una desconexión explícita antes de liberarlo.
+* Esta revisión de firmware no acepta RFCOMM inmediatamente después de un sondeo BLE. Por eso `imprimir.py --mode classic` reserva BLE para la telemetría posterior, en vez de hacer un pre-chequeo.
+* Se ejecutó el CLI completo con `CLI RFCOMM`. Tras el envío, los contadores quedaron estables en **123 / 7.100 / 13.985**, confirmando una segunda impresión física por la ruta predeterminada.

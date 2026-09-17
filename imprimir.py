@@ -8,8 +8,17 @@ en etiquetas de 40 mm x 30 mm (o cualquier otra medida).
 import os
 import sys
 import argparse
+import time
 from label_designer import render_labels
-from printer import print_via_ble, print_via_usb, get_printer_telemetry, DEFAULT_BLE_MAC
+from printer import (
+    print_via_classic,
+    print_via_ble,
+    print_via_usb,
+    get_printer_telemetry,
+    has_durable_print_confirmation,
+    motion_counters,
+    DEFAULT_BLE_MAC,
+)
 
 def main():
     parser = argparse.ArgumentParser(description="Impresor de etiquetas directas para DeTonger P1")
@@ -20,10 +29,23 @@ def main():
     parser.add_argument("--border", action="store_true", help="Dibujar un marco/borde negro alrededor de la etiqueta")
     parser.add_argument("--header", type=str, default=None, help="Encabezado o título opcional arriba de la etiqueta")
     parser.add_argument("--align", choices=["left", "center", "right"], default="center", help="Alineación del texto (default: center)")
-    parser.add_argument("--mode", choices=["ble", "usb", "preview"], default="ble", help="Modo: 'ble' (Bluetooth inalámbrico), 'usb' (cable) o 'preview' (guardar imagen)")
+    parser.add_argument(
+        "--mode",
+        choices=["classic", "ble", "usb", "preview"],
+        default="classic",
+        help="Modo: classic (Bluetooth RFCOMM, verificado), ble (diagnóstico), usb o preview",
+    )
     parser.add_argument("--mac", type=str, default=DEFAULT_BLE_MAC, help="Dirección MAC Bluetooth de la impresora")
-    parser.add_argument("--darkness", type=int, default=10, help="Intensidad de calor térmico 1-15 (default: 10 Alta)")
+    parser.add_argument("--rfcomm-channel", type=int, default=1, help="Canal RFCOMM Classic (default: 1, detectado por SDP)")
+    parser.add_argument("--darkness", type=int, default=10, help="Intensidad de calor térmico 0-14 (default: 10)")
+    parser.add_argument("--speed", type=int, default=3, help="Velocidad térmica 0-4 (default: 3)")
     parser.add_argument("--gap-type", type=int, default=0, help="Tipo de papel: 0=Continuo (sin sensor de brecha), 2=Etiquetas troqueladas con brecha (default: 0)")
+    parser.add_argument(
+        "--encoding-profile",
+        choices=["dothan-v11", "sdk-compact", "sdk-raw"],
+        default="sdk-compact",
+        help="Codificación nativa: sdk-compact (perfil histórico), sdk-raw o dothan-v11 (diagnóstico)",
+    )
     parser.add_argument("--status", action="store_true", help="Consultar telemetría, sensores y contadores de la impresora vía BLE")
 
     args = parser.parse_args()
@@ -90,42 +112,91 @@ def main():
         sys.exit(0)
 
     # Envío a la impresora
-    if args.mode == "ble":
-        print(f"\n[2/3] Conectando a la impresora por Bluetooth ({args.mac})...")
-        # Pre-chequeo del hardware físico de la impresora
-        telemetry = get_printer_telemetry(args.mac)
-        if not telemetry.get("connected"):
-            print(f"\n[ERROR] No se pudo conectar a la impresora: {telemetry.get('error', 'Desconectada')}")
-            print("Consejo: Asegúrate de que la impresora esté encendida y cerca de la PC.")
-            sys.exit(1)
+    if args.mode in ("classic", "ble"):
+        transport_name = "Bluetooth Classic RFCOMM" if args.mode == "classic" else "Bluetooth LE (diagnóstico)"
+        print(f"\n[2/3] Conectando a la impresora por {transport_name} ({args.mac})...")
+        telemetry = None
+        if args.mode == "ble":
+            # Esta consulta comparte el mismo transporte BLE experimental, por
+            # lo que es segura antes de escribir por GATT.
+            telemetry = get_printer_telemetry(args.mac)
+            if not telemetry.get("connected"):
+                print(f"\n[ERROR] No se pudo conectar a la impresora: {telemetry.get('error', 'Desconectada')}")
+                print("Consejo: Asegúrate de que la impresora esté encendida y cerca de la PC.")
+                sys.exit(1)
 
-        code = telemetry.get("printable_code", 0)
-        if code != 0:
-            desc = telemetry.get("printable_status", f"Código {code}")
-            print(f"\n[ALERTA DE HARDWARE] La impresora no está lista para imprimir: {desc}")
-            if code == 34:
-                print("  -> MOTIVO: La tapa de la impresora está abierta o no trabó completamente.")
-                print("     El LED se ilumina en AMARILLO/ÁMBAR indicando este estado.")
-                print("  -> SOLUCIÓN: Cierra la tapa presionando con firmeza en ambos lados hasta")
-                print("     escuchar el 'click'. El LED cambiará a VERDE inmediatamente.")
-            elif code == 35:
-                print("  -> MOTIVO: No se detecta papel. Asegúrate de colocar el rollo.")
-            elif code == 30:
-                print("  -> MOTIVO: Batería baja. Conecta la impresora por USB para cargarla.")
-            sys.exit(1)
+            code = telemetry.get("printable_code", 0)
+            if code != 0:
+                desc = telemetry.get("printable_status", f"Código {code}")
+                print(f"\n[ALERTA DE HARDWARE] La impresora no está lista para imprimir: {desc}")
+                if code == 34:
+                    print("  -> MOTIVO: La tapa de la impresora está abierta o no trabó completamente.")
+                elif code == 35:
+                    print("  -> MOTIVO: No se detecta papel. Asegúrate de colocar el rollo.")
+                elif code == 30:
+                    print("  -> MOTIVO: Batería baja. Conecta la impresora por USB para cargarla.")
+                sys.exit(1)
+        else:
+            # Esta revisión de firmware no permite abrir RFCOMM justo después
+            # de una sesión BLE. Se consulta telemetría recién al cerrar el
+            # stream Classic.
+            print("  -> Se reserva BLE para confirmar el resultado después del envío RFCOMM.")
 
         try:
-            print_via_ble(
-                images=images,
-                mac_address=args.mac,
-                gap_type=args.gap_type,
-                darkness=args.darkness,
-                progress_cb=lambda msg: print(f"  -> {msg}")
-            )
-            print("[3/3] ¡Impresión Bluetooth completada con éxito!")
+            if args.mode == "classic":
+                print_via_classic(
+                    images=images,
+                    mac_address=args.mac,
+                    gap_type=args.gap_type,
+                    darkness=args.darkness,
+                    speed=args.speed,
+                    profile=args.encoding_profile,
+                    channel=args.rfcomm_channel,
+                    progress_cb=lambda msg: print(f"  -> {msg}"),
+                )
+            else:
+                print_via_ble(
+                    images=images,
+                    mac_address=args.mac,
+                    gap_type=args.gap_type,
+                    darkness=args.darkness,
+                    speed=args.speed,
+                    profile=args.encoding_profile,
+                    progress_cb=lambda msg: print(f"  -> {msg}"),
+                )
+            # Que Windows acepte los paquetes ATT no demuestra que la P1 los
+            # haya ejecutado. Sus contadores son la evidencia mínima de
+            # actividad física disponible sin depender de la observación visual.
+            after = get_printer_telemetry(args.mac)
+            time.sleep(1)
+            confirmation = get_printer_telemetry(args.mac)
+            if not after.get("connected") or not confirmation.get("connected"):
+                raise RuntimeError("No se pudo obtener confirmación de la impresora después del envío.")
+            if args.mode == "classic":
+                print(
+                    "  -> Contadores posteriores / confirmación: "
+                    f"{motion_counters(after)} / {motion_counters(confirmation)}"
+                )
+                if motion_counters(after) != motion_counters(confirmation):
+                    raise RuntimeError("Los contadores posteriores no se estabilizaron.")
+                print("[3/3] Stream RFCOMM entregado; la telemetría posterior quedó estable.")
+            else:
+                print(
+                    "  -> Contadores (antes / después / confirmación): "
+                    f"{motion_counters(telemetry)} / {motion_counters(after)} / {motion_counters(confirmation)}"
+                )
+                if not has_durable_print_confirmation(telemetry, after, confirmation):
+                    raise RuntimeError(
+                        "La impresora no confirmó actividad física de forma estable. "
+                        "No se considera una impresión exitosa."
+                    )
+                print("[3/3] ¡La impresora confirmó actividad física!")
         except Exception as e:
-            print(f"\n[ERROR] Falló la conexión Bluetooth: {e}")
-            print("Consejo: Asegúrate de que la impresora esté encendida y cerca de la PC.")
+            print(f"\n[ERROR] No se confirmó la impresión por {transport_name}: {e}")
+            if args.mode == "classic":
+                print("Consejo: apaga Bluetooth en el Android, empareja P1-40608023 desde Windows y reintenta.")
+            else:
+                print("Consejo: usa --mode classic; BLE quedó sólo para diagnóstico y telemetría.")
             sys.exit(1)
 
     elif args.mode == "usb":

@@ -1,14 +1,16 @@
 # Sistema Autónomo de Impresión de Etiquetas (DeTonger P1 / DT01)
 
-Este proyecto permite **imprimir texto directamente** en la impresora de etiquetas térmica portátil **DeTonger P1 (DT01)** sin necesidad de abrir navegadores web, sitios oficiales ni programas de terceros.
+Este proyecto genera etiquetas para una impresora térmica **DeTonger P1 (DT01)**. La aplicación oficial usa Bluetooth Classic/RFCOMM (canal 1); esa es la ruta predeterminada. BLE se conserva para telemetría y diagnóstico. Para comprobar físicamente una impresión, se comparan los contadores de `python imprimir.py --status` antes y después del envío.
 
 ---
 
 ## 🚀 Características principales
 * **Paginación y ajuste automático de texto (Word-Wrapping):**  
   Calcula el ancho y alto disponible en milímetros. Si el texto cabe en una etiqueta, lo centra limpiamente. Si el texto es largo, lo divide de forma inteligente en párrafos/líneas y genera etiquetas consecutivas numeradas (`[1/2]`, `[2/2]`, etc.).
-* **Conexión Inalámbrica Directa (Bluetooth LE):**  
-  Se comunica directamente por radio Bluetooth LE con la impresora (`B8:50:44:0C:9E:39`) sin cables.
+* **Conexión inalámbrica directa (Bluetooth Classic/RFCOMM):**
+  Es el transporte observado en una impresión válida de la aplicación oficial. Windows debe estar emparejado con `P1-40608023`; el programa usa el canal RFCOMM 1 y tramas de hasta 122 bytes.
+* **BLE para telemetría y diagnóstico:**
+  `--status` lee el estado y los contadores. El modo `--mode ble` permanece para investigación, no como transporte recomendado.
 * **Soporte por Cable (USB):**  
   Si la conectas por USB, también puedes enviar a la cola de Windows (`P1 Label Printer`).
 * **Modo Vista Previa:**  
@@ -19,7 +21,8 @@ Este proyecto permite **imprimir texto directamente** en la impresora de etiquet
 ## 📁 Archivos del proyecto
 * `imprimir.py`: Interfaz de línea de comandos (CLI) interactiva y script principal.
 * `label_designer.py`: Motor gráfico de renderizado con Pillow a 203 DPI (ajuste de fuentes, márgenes, cálculo de líneas).
-* `printer.py`: Controlador de comunicación física (Bluetooth LE con `bleak` y USB con Windows Spooler).
+* `printer.py`: Controlador Classic RFCOMM, BLE (`bleak`) para telemetría y USB con Windows Spooler.
+* `tools/analyze_btsnoop.py`: Analiza un registro HCI de Android y extrae el transporte/flujo usado por una impresión válida.
 * `encoder.js` & `detong_sdk.js`: Motor de serialización binaria nativo de la impresora térmica.
 * `HISTORIAL_INVESTIGACION.md`: Bitácora técnica completa de ingeniería inversa, telemetría y pruebas físicas.
 
@@ -31,6 +34,8 @@ Este proyecto permite **imprimir texto directamente** en la impresora de etiquet
 ```bash
 python imprimir.py "Caja 4: Repuestos de computación"
 ```
+
+Antes de la primera impresión, desconecta la app Android y empareja `P1-40608023` desde **Configuración de Windows → Bluetooth y dispositivos**. Si fuera necesario, el canal puede indicarse explícitamente con `--rfcomm-channel 1`.
 
 ### 2. Imprimir con un encabezado o título arriba:
 ```bash
@@ -74,7 +79,7 @@ El papel térmico solo reacciona al calor en **una de sus caras** (la cara donde
 
 ```python
 from label_designer import render_labels
-from printer import print_via_ble, print_via_usb
+from printer import print_via_classic, print_via_usb
 
 # 1. Diseñas las etiquetas
 images = render_labels(
@@ -86,5 +91,5 @@ images = render_labels(
 )
 
 # 2. Las imprimes por Bluetooth directamente:
-print_via_ble(images)
+print_via_classic(images)
 ```
