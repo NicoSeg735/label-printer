@@ -106,26 +106,29 @@ async def _send_ble_payload(mac_address: str, payloads: list[bytes], progress_cb
                 if progress_cb:
                     progress_cb(f"Imprimiendo etiqueta {idx}/{len(payloads)}...")
 
-                # Verificación previa de estado
+                # Verificación previa y preparación de cabezal
                 pkg_status = bytes([
+                    0x1F, 0x80, 0x01, 0x7F, 0x88,
+                    0x1F, 0x84, 0x01, 0x01, 0x88,
+                    0x1F, 0x80, 0x01, 0x00, 0x88,
                     0x1F, 0x70, 0x00, 0x88, # CMD_IS_PRINTABLE
                     0x1F, 0x77, 0x00, 0x88  # CMD_BUFFER_SIZE
                 ])
                 await _send_chunks(client, pkg_status)
-                await asyncio.sleep(0.2)
-
-                # Enviar payload de imagen
-                await _send_chunks(client, payload, chunk_size=20, delay=0.015)
                 await asyncio.sleep(0.3)
 
-                # Form Feed / confirmación de página
+                # Enviar payload de imagen con espaciado seguro para el chip DF2
+                await _send_chunks(client, payload, chunk_size=20, delay=0.020)
+                await asyncio.sleep(0.8)
+
+                # Form Feed adicional para que la etiqueta avance hasta la barra de corte
                 await client.write_gatt_char(WRITE_CHAR_UUID, bytes([0x0C]), response=False)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.0)
 
             if progress_cb:
                 progress_cb("Finalizando impresión...")
 
-            # Pequeña pausa para que el motor físico termine de traccionar el papel
+            # Pausa para que el motor termine el arrastre
             await asyncio.sleep(1.5)
         finally:
             try:
@@ -133,7 +136,7 @@ async def _send_ble_payload(mac_address: str, payloads: list[bytes], progress_cb
             except Exception:
                 pass
 
-def print_via_ble(images: list[Image.Image], mac_address: str = DEFAULT_BLE_MAC, gap_type: int = 2, darkness: int = 10, speed: int = 3, progress_cb=None):
+def print_via_ble(images: list[Image.Image], mac_address: str = DEFAULT_BLE_MAC, gap_type: int = 2, darkness: int = 12, speed: int = 2, progress_cb=None):
     """Imprime una lista de imágenes de etiquetas directamente por Bluetooth LE con oscuridad térmica optimizada."""
     payloads = []
     for img in images:
