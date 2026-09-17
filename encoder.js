@@ -24,14 +24,15 @@ function encodeImage(imagePath, gapType = 2, darkness = 3, speed = 3) {
             printerDPI: 203,
             printerWidth: 384,
             gapType: gapType,
-            gapLength: 2,
+            gapLength: 0,
             printDarkness: darkness,
             printSpeed: speed
         }, {
             printerDPI: 203,
             printerWidth: 384,
+            enableSuperBitmap: false,
             hardwareFlags: 0,
-            softwareFlags: 16
+            softwareFlags: 0
         });
 
         const outPath = imagePath + '.bin';
