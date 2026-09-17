@@ -46,10 +46,26 @@ python imprimir.py "Este texto es demasiado largo para entrar en una sola etique
 python imprimir.py "Texto de prueba" --mode preview
 ```
 
-### 5. Imprimir con medidas personalizadas (ej. 50x30 mm):
+### 5. Consultar telemetría y contadores de la impresora:
+```bash
+python imprimir.py --status
+```
+Muestra el estado del cabezal térmico, si está lista para imprimir y los contadores acumulados de hardware (etiquetas históricas impresas, líneas térmicas quemadas y pasos de motor).
+
+### 6. Imprimir con medidas personalizadas (ej. 50x30 mm):
 ```bash
 python imprimir.py "Etiqueta grande" --width 50 --height 30
 ```
+
+---
+
+## ⚠️ Instalación del rollo de papel (Muy importante)
+
+El papel térmico solo reacciona al calor en **una de sus caras** (la cara donde está la etiqueta adhesiva blanca).
+* En la **DeTonger P1**, el cabezal térmico está ubicado en la parte inferior del compartimento.
+* Por lo tanto, el rollo debe colocarse con la **cara blanca imprimible hacia ABAJO**.
+* Si el rollo se coloca con la cara blanca hacia arriba, el cabezal aplicará calor al liner encerado trasero y la etiqueta saldrá en blanco sin ninguna marca negra.
+* **Prueba rápida (Scratch Test):** Si raspas con la uña la cara del papel que reacciona al calor, quedará una marca gris/negra al instante. Esa es la cara que debe apuntar hacia el cabezal.
 
 ---
 

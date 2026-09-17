@@ -144,6 +144,85 @@ def print_via_ble(images: list[Image.Image], mac_address: str = DEFAULT_BLE_MAC,
         
     asyncio.run(_send_ble_payload(mac_address, payloads, progress_cb))
 
+def get_printer_telemetry(mac_address: str = DEFAULT_BLE_MAC) -> dict:
+    """Consulta el estado del hardware, sensores y contador de vida útil de la impresora."""
+    from bleak import BleakClient
+
+    telemetry = {
+        "connected": False,
+        "dpi": None,
+        "printable_code": None,
+        "printable_status": None,
+        "lifetime_labels": None,
+        "lifetime_lines": None,
+        "lifetime_steps": None,
+        "lifetime_cuts": None,
+    }
+
+    STATUS_MAP = {
+        0: "OK (Listo para imprimir)",
+        1: "Imprimiendo en curso",
+        2: "Motor en rotación",
+        10: "Sin trabajo activo",
+        11: "Página incompleta",
+        12: "Trabajo cancelado",
+        30: "Voltaje de batería bajo",
+        31: "Voltaje de batería alto",
+        32: "Cabezal no detectado",
+        33: "Cabezal sobrecalentado",
+        34: "Tapa abierta",
+        35: "Sin papel",
+        42: "Etiqueta no detectada",
+    }
+
+    async def _query():
+        buf = bytearray()
+
+        def _on_notify(sender, data):
+            buf.extend(data)
+            while len(buf) >= 3:
+                if buf[0] != 0x1f:
+                    buf.pop(0)
+                    continue
+                plen = buf[2]
+                total_len = 3 + plen + 1
+                if len(buf) < total_len:
+                    break
+                packet = bytes(buf[:total_len])
+                del buf[:total_len]
+                cmd = packet[1]
+                if cmd == 0x71 and plen >= 1:
+                    telemetry["dpi"] = packet[3] if packet[3] != 0 else 203
+                elif cmd == 0x70 and plen >= 1:
+                    code = packet[3]
+                    telemetry["printable_code"] = code
+                    telemetry["printable_status"] = STATUS_MAP.get(code, f"Código {code}")
+                elif cmd == 0x73 and plen >= 16:
+                    telemetry["lifetime_lines"] = int.from_bytes(packet[3:7], "big")
+                    telemetry["lifetime_steps"] = int.from_bytes(packet[7:11], "big")
+                    telemetry["lifetime_cuts"] = int.from_bytes(packet[11:15], "big")
+                    telemetry["lifetime_labels"] = int.from_bytes(packet[15:19], "big")
+
+        async with BleakClient(mac_address, timeout=12.0) as client:
+            telemetry["connected"] = client.is_connected
+            await client.start_notify(NOTIFY_CHAR_UUID, _on_notify)
+            await asyncio.sleep(0.5)
+
+            # Consultas secuenciales con espaciado
+            for cmd_byte in [0x70, 0x71, 0x73]:
+                await client.write_gatt_char(WRITE_CHAR_UUID, bytes([0x1F, cmd_byte, 0x00, 0x88]), response=False)
+                await asyncio.sleep(0.4)
+
+            # Tiempo de espera para que se reciban todos los fragmentos
+            await asyncio.sleep(0.6)
+
+    try:
+        asyncio.run(_query())
+    except Exception as e:
+        telemetry["error"] = str(e)
+
+    return telemetry
+
 def print_via_usb(images: list[Image.Image], printer_name: str = "P1 Label Printer", paper_size_id: int = 185):
     """Imprime una lista de imágenes usando el driver nativo de Windows (cable USB)."""
     import win32print

@@ -9,7 +9,7 @@ import os
 import sys
 import argparse
 from label_designer import render_labels
-from printer import print_via_ble, print_via_usb, DEFAULT_BLE_MAC
+from printer import print_via_ble, print_via_usb, get_printer_telemetry, DEFAULT_BLE_MAC
 
 def main():
     parser = argparse.ArgumentParser(description="Impresor de etiquetas directas para DeTonger P1")
@@ -22,8 +22,31 @@ def main():
     parser.add_argument("--mode", choices=["ble", "usb", "preview"], default="ble", help="Modo: 'ble' (Bluetooth inalámbrico), 'usb' (cable) o 'preview' (guardar imagen)")
     parser.add_argument("--mac", type=str, default=DEFAULT_BLE_MAC, help="Dirección MAC Bluetooth de la impresora")
     parser.add_argument("--darkness", type=int, default=10, help="Intensidad de calor térmico 1-15 (default: 10)")
+    parser.add_argument("--status", action="store_true", help="Consultar telemetría, sensores y contadores de la impresora vía BLE")
 
     args = parser.parse_args()
+
+    if args.status:
+        print("=" * 60)
+        print("  CONSULTANDO TELEMETRÍA Y ESTADO DE LA IMPRESORA (BLE)")
+        print(f"  Dirección MAC: {args.mac}")
+        print("=" * 60)
+        telemetry = get_printer_telemetry(args.mac)
+        if not telemetry.get("connected"):
+            print(f"[ERROR] No se pudo conectar a la impresora: {telemetry.get('error', 'Desconectada')}")
+            sys.exit(1)
+
+        print("\nEstado de la impresora:")
+        print(f"  * Conexión BLE:       Conectado exitosamente")
+        print(f"  * Resolución cabezal: {telemetry.get('dpi') or 203} DPI")
+        print(f"  * Estado operacional: {telemetry.get('printable_status', 'Desconocido')} (Código {telemetry.get('printable_code')})")
+        print("\nContadores de hardware (telemetría acumulada):")
+        print(f"  * Etiquetas impresas históricas: {telemetry.get('lifetime_labels', 'N/D')}")
+        print(f"  * Líneas térmicas quemadas:      {telemetry.get('lifetime_lines', 'N/D')}")
+        print(f"  * Pasos del motor de arrastre:   {telemetry.get('lifetime_steps', 'N/D')}")
+        print(f"  * Cortes / operaciones totales:  {telemetry.get('lifetime_cuts', 'N/D')}")
+        print("=" * 60)
+        sys.exit(0)
 
     # Si no se pasó texto por argumento, pedirlo interactivamente
     text_to_print = args.text

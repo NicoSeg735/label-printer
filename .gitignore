@@ -6,4 +6,7 @@ __pycache__/
 *.raw
 *.bin
 preview_*.png
+test_*.png
+attempt_*.png
+check_*.png
 .system_generated/
