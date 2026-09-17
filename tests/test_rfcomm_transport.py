@@ -3,8 +3,11 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from printer import (
+    GAP_TYPE_CONTINUOUS,
+    GAP_TYPE_DIE_CUT_LABEL,
     RFCOMM_MAX_PAYLOAD,
     _send_rfcomm_payload,
+    gap_type_for_media,
     normalize_bluetooth_address,
     print_via_classic,
     validate_rfcomm_settings,
@@ -52,6 +55,12 @@ class RfcommTransportTests(unittest.TestCase):
     def test_refuses_an_empty_print_job_before_opening_a_connection(self):
         with self.assertRaisesRegex(ValueError, "No hay etiquetas"):
             print_via_classic([])
+
+    def test_media_presets_do_not_treat_die_cut_labels_as_continuous_paper(self):
+        self.assertEqual(gap_type_for_media("labels"), GAP_TYPE_DIE_CUT_LABEL)
+        self.assertEqual(gap_type_for_media("continuous"), GAP_TYPE_CONTINUOUS)
+        with self.assertRaises(ValueError):
+            gap_type_for_media("receipt")
 
 
 if __name__ == "__main__":

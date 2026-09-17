@@ -163,3 +163,9 @@ Cuando quieras volver a trabajar en este proyecto, estos son los pasos directos:
 * Las operaciones de conexión y envío conservan un límite de tiempo. Los errores de adaptador, emparejamiento, Android conectado o sesión retenida detallan la recuperación sugerida.
 * Si RFCOMM ya entregó el stream pero falla la telemetría BLE posterior, el CLI no reintenta automáticamente: informa la situación y pide revisar el papel, eliminando el riesgo de una etiqueta duplicada.
 * La suite automatizada cubre framing de 122 bytes, cierre RFCOMM, configuración inválida, fallo al crear el socket y trabajos vacíos; se ejecuta con `python -m unittest discover -s tests -v`.
+
+## 10. Alineación de etiquetas troqueladas (2026-09-17)
+
+* Una impresión de tres páginas mostró un corrimiento vertical acumulativo: la primera etiqueta quedó alineada, la segunda empezó antes de su borde y la tercera acumuló aún más desplazamiento.
+* La causa fue la configuración predeterminada `gap_type = 0` (material continuo) para un rollo autoadhesivo con brechas físicas. Ese modo avanza solamente la altura del bitmap y no sincroniza cada página con la siguiente etiqueta.
+* El CLI ahora selecciona `--media labels` por defecto, que transmite `gap_type = 2` y usa el sensor de brecha. `--media continuous` conserva el comportamiento anterior únicamente para material sin separaciones. El valor bajo nivel `--gap-type` queda disponible para diagnóstico.

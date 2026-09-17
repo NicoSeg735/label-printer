@@ -19,6 +19,7 @@ from printer import (
     motion_counters,
     DEFAULT_BLE_MAC,
     RFCOMM_CONNECT_TIMEOUT_SECONDS,
+    gap_type_for_media,
     validate_rfcomm_settings,
 )
 
@@ -47,7 +48,18 @@ def main():
     )
     parser.add_argument("--darkness", type=int, default=10, help="Intensidad de calor térmico 0-14 (default: 10)")
     parser.add_argument("--speed", type=int, default=3, help="Velocidad térmica 0-4 (default: 3)")
-    parser.add_argument("--gap-type", type=int, default=0, help="Tipo de papel: 0=Continuo (sin sensor de brecha), 2=Etiquetas troqueladas con brecha (default: 0)")
+    parser.add_argument(
+        "--media",
+        choices=["labels", "continuous"],
+        default="labels",
+        help="Material: labels (troqueladas con brecha, default) o continuous (sin brecha)",
+    )
+    parser.add_argument(
+        "--gap-type",
+        type=int,
+        default=None,
+        help="Override de protocolo: 0=continuo, 2=etiquetas con brecha; normalmente usá --media",
+    )
     parser.add_argument(
         "--encoding-profile",
         choices=["dothan-v11", "sdk-compact", "sdk-raw"],
@@ -63,6 +75,8 @@ def main():
         )
     except ValueError as exc:
         parser.error(str(exc))
+    if args.gap_type is None:
+        args.gap_type = gap_type_for_media(args.media)
 
     if args.status:
         print("=" * 60)

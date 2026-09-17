@@ -50,6 +50,14 @@ python imprimir.py "Caja 4: Repuestos de computación"
 
 Antes de la primera impresión, desconecta la app Android y empareja `P1-40608023` desde **Configuración de Windows → Bluetooth y dispositivos**. Si fuera necesario, el canal puede indicarse explícitamente con `--rfcomm-channel 1`.
 
+El modo predeterminado es `--media labels`: activa la detección de la brecha entre etiquetas troqueladas para que cada página vuelva a su borde físico. Para un material realmente continuo, sin brecha, elegí el modo explícito:
+
+```bash
+python imprimir.py "Texto corrido" --media continuous
+```
+
+No uses `continuous` con el rollo autoadhesivo troquelado: el papel avanzará sólo la altura dibujada y el desfasaje se acumulará página a página.
+
 Para una conexión lenta o con interferencias, se puede ampliar el límite sin modificar el código:
 
 ```bash

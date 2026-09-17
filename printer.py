@@ -24,6 +24,8 @@ NOTIFY_CHAR_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
 RFCOMM_CHANNEL = 1
 RFCOMM_MAX_PAYLOAD = 122
 RFCOMM_CONNECT_TIMEOUT_SECONDS = 15.0
+GAP_TYPE_CONTINUOUS = 0
+GAP_TYPE_DIE_CUT_LABEL = 2
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MAX_PRINT_WIDTH_DOTS = 384
 _BLUETOOTH_ADDRESS_RE = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
@@ -33,6 +35,18 @@ _BLUETOOTH_ADDRESS_RE = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 class EncodedLabel:
     data: bytes
     profile: str
+
+
+def gap_type_for_media(media: str) -> int:
+    """Convierte el tipo de material legible en el valor del protocolo P1."""
+    media_types = {
+        "labels": GAP_TYPE_DIE_CUT_LABEL,
+        "continuous": GAP_TYPE_CONTINUOUS,
+    }
+    try:
+        return media_types[media]
+    except KeyError as exc:
+        raise ValueError("El material debe ser 'labels' o 'continuous'.") from exc
 
 
 def normalize_bluetooth_address(mac_address: str) -> str:
@@ -209,7 +223,7 @@ async def _send_ble_payload(mac_address: str, payloads: list[EncodedLabel], prog
 def print_via_ble(
     images: list[Image.Image],
     mac_address: str = DEFAULT_BLE_MAC,
-    gap_type: int = 0,
+    gap_type: int = GAP_TYPE_DIE_CUT_LABEL,
     darkness: int = 6,
     speed: int = 3,
     profile: str = "sdk-compact",
@@ -298,7 +312,7 @@ def _send_rfcomm_payload(
 def print_via_classic(
     images: list[Image.Image],
     mac_address: str = DEFAULT_BLE_MAC,
-    gap_type: int = 0,
+    gap_type: int = GAP_TYPE_DIE_CUT_LABEL,
     darkness: int = 6,
     speed: int = 3,
     profile: str = "sdk-compact",
